@@ -47,38 +47,42 @@ user_sessions = {}
 def get_db_connection():
     return psycopg2.connect(os.environ['DATABASE_URL'])
 
-def generate_1secmail():
+def generate_guerrilla():
     try:
-        resp = re.get("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1", timeout=10)
+        resp = re.get("https://api.guerrillamail.com/ajax.php?f=get_email_address&ip=127.0.0.1&agent=Mozilla", timeout=10)
         if resp.status_code == 200:
-            emails = resp.json()
-            if emails and len(emails) > 0:
-                email = emails[0]
-                login, domain = email.split('@')
-                return {'email': email, 'login': login, 'domain': domain}
+            data = resp.json()
+            if data and 'email_addr' in data and 'sid_token' in data:
+                return {
+                    'email': data['email_addr'],
+                    'sid_token': data['sid_token'],
+                    'alias': data.get('alias', '')
+                }
         return None
     except Exception as e:
-        print(f"Error generating 1secmail: {e}")
+        print(f"Error generating Guerrilla Mail: {e}")
         return None
 
-def check_1secmail_messages(login, domain):
+def check_guerrilla_messages(sid_token):
     try:
-        resp = re.get(f"https://www.1secmail.com/api/v1/?action=getMessages&login={login}&domain={domain}", timeout=10)
+        resp = re.get(f"https://api.guerrillamail.com/ajax.php?f=check_email&sid_token={sid_token}&seq=0", timeout=10)
         if resp.status_code == 200:
-            return resp.json()
+            data = resp.json()
+            if 'list' in data:
+                return data['list']
         return []
     except Exception as e:
-        print(f"Error checking 1secmail messages: {e}")
+        print(f"Error checking Guerrilla Mail messages: {e}")
         return []
 
-def read_1secmail_message(login, domain, msg_id):
+def read_guerrilla_message(sid_token, mail_id):
     try:
-        resp = re.get(f"https://www.1secmail.com/api/v1/?action=readMessage&login={login}&domain={domain}&id={msg_id}", timeout=10)
+        resp = re.get(f"https://api.guerrillamail.com/ajax.php?f=fetch_email&sid_token={sid_token}&email_id={mail_id}", timeout=10)
         if resp.status_code == 200:
             return resp.json()
         return None
     except Exception as e:
-        print(f"Error reading 1secmail message: {e}")
+        print(f"Error reading Guerrilla Mail message: {e}")
         return None
 
 def init_database():
@@ -211,7 +215,7 @@ async def start_msg(client,message):
     log_user(message.from_user)
     
     if user_id not in user_sessions:
-        user_sessions[user_id] = {'email': '', 'auth_token': None, 'idnum': None, 'saved_emails': {}, 'password': '', 'email_service': None, 'login': None, 'domain': None}
+        user_sessions[user_id] = {'email': '', 'auth_token': None, 'idnum': None, 'saved_emails': {}, 'password': '', 'email_service': None, 'sid_token': None}
     
     welcome_text = f"""**👋 Welcome {message.from_user.first_name}!**
 
@@ -221,7 +225,7 @@ This bot allows you to generate disposable email addresses to protect your priva
 
 **🎯 Features:**
 • Generate unlimited temporary emails
-• Multiple email services (1secMail & Mail.tm)
+• Multiple email services (Guerrilla Mail & Mail.tm)
 • Receive and read messages instantly
 • Save emails for future reuse
 • Manage multiple email addresses
@@ -261,7 +265,7 @@ async def help_msg(client, message):
 📖 View Message - Read full message content
 
 **📬 Email Services:**
-• **1secMail** - Fast, no registration, better for bypassing blocks
+• **Guerrilla Mail** - Fast, no registration, better for bypassing blocks
 • **Mail.tm** - Secure, password-protected emails
 
 **💡 Pro Tips:**
@@ -280,32 +284,28 @@ async def mailbox(client,message):
     user_id = message.from_user.id
     
     if user_id not in user_sessions:
-        user_sessions[user_id] = {'email': '', 'auth_token': None, 'idnum': None, 'saved_emails': {}, 'password': '', 'email_service': None, 'login': None, 'domain': None}
+        user_sessions[user_id] = {'email': '', 'auth_token': None, 'idnum': None, 'saved_emails': {}, 'password': '', 'email_service': None, 'sid_token': None}
     
     if response=='generate':
         service_buttons = InlineKeyboardMarkup([
-            [InlineKeyboardButton('⚡ 1secMail (Fast)', callback_data='gen_1secmail')],
+            [InlineKeyboardButton('⚡ Guerrilla Mail (Fast)', callback_data='gen_guerrilla')],
             [InlineKeyboardButton('🔐 Mail.tm (Secure)', callback_data='gen_mailtm')],
             [InlineKeyboardButton('❌ Cancel', callback_data='close')]
         ])
-        await message.edit_message_text('**📧 Choose Email Service:**\n\n⚡ **1secMail** - Fast, no registration, better for bypassing blocks\n🔐 **Mail.tm** - Secure, password-protected emails\n\nSelect your preferred service:', reply_markup=service_buttons)
+        await message.edit_message_text('**📧 Choose Email Service:**\n\n⚡ **Guerrilla Mail** - Fast, no registration, great for bypassing blocks\n🔐 **Mail.tm** - Secure, password-protected emails\n\nSelect your preferred service:', reply_markup=service_buttons)
     
-    elif response=='gen_1secmail':
+    elif response=='gen_guerrilla':
         try:
-            import random
-            import string
+            await message.edit_message_text('🔄 Generating Guerrilla Mail address...')
             
-            await message.edit_message_text('🔄 Generating 1secMail address...')
-            
-            email_data = generate_1secmail()
+            email_data = generate_guerrilla()
             if not email_data:
-                await message.edit_message_text('❌ Unable to generate 1secMail. Please try again.', reply_markup=buttons)
+                await message.edit_message_text('❌ Unable to generate Guerrilla Mail. Please try Mail.tm instead.', reply_markup=buttons)
                 return
             
             user_sessions[user_id]['email'] = email_data['email']
-            user_sessions[user_id]['email_service'] = '1secmail'
-            user_sessions[user_id]['login'] = email_data['login']
-            user_sessions[user_id]['domain'] = email_data['domain']
+            user_sessions[user_id]['email_service'] = 'guerrilla'
+            user_sessions[user_id]['sid_token'] = email_data['sid_token']
             user_sessions[user_id]['password'] = ''
             user_sessions[user_id]['auth_token'] = None
             user_sessions[user_id]['idnum'] = None
@@ -313,14 +313,14 @@ async def mailbox(client,message):
             await message.edit_message_text(
                 f'**✅ Email Generated Successfully!**\n\n'
                 f'📧 Your temporary email:\n`{email_data["email"]}`\n\n'
-                f'🔧 Service: **1secMail**\n'
+                f'🔧 Service: **Guerrilla Mail**\n'
                 f'⚡ Fast delivery, no authentication required\n\n'
                 f'💡 Use the buttons below to manage your inbox.',
                 reply_markup=buttons
             )
-            print(f"Generated 1secmail for user {user_id}: {email_data['email']}")
+            print(f"Generated Guerrilla Mail for user {user_id}: {email_data['email']}")
         except Exception as e:
-            print(f"Error generating 1secmail: {e}")
+            print(f"Error generating Guerrilla Mail: {e}")
             await message.edit_message_text('❌ Unable to generate email. Please try again.', reply_markup=buttons)
     
     elif response=='gen_mailtm':
@@ -332,7 +332,7 @@ async def mailbox(client,message):
            
            domains_resp = re.get("https://api.mail.tm/domains", timeout=10)
            if domains_resp.status_code != 200:
-               await message.edit_message_text('❌ Mail.tm service unavailable. Try 1secMail instead.', reply_markup=buttons)
+               await message.edit_message_text('❌ Mail.tm service unavailable. Try Guerrilla Mail instead.', reply_markup=buttons)
                return
            
            domains = domains_resp.json()['hydra:member']
@@ -352,7 +352,7 @@ async def mailbox(client,message):
            account_resp = re.post("https://api.mail.tm/accounts", json=account_data, timeout=10)
            
            if account_resp.status_code != 201:
-               await message.edit_message_text('❌ Unable to create Mail.tm account. Try 1secMail instead.', reply_markup=buttons)
+               await message.edit_message_text('❌ Unable to create Mail.tm account. Try Guerrilla Mail instead.', reply_markup=buttons)
                return
            
            token_data = {
@@ -379,11 +379,11 @@ async def mailbox(client,message):
                )
                print(f"Generated Mail.tm email for user {user_id}: {email}")
            else:
-               await message.edit_message_text('❌ Authentication failed. Try 1secMail instead.', reply_markup=buttons)
+               await message.edit_message_text('❌ Authentication failed. Try Guerrilla Mail instead.', reply_markup=buttons)
                
        except Exception as e:
            print(f"Error generating Mail.tm email: {e}")
-           await message.edit_message_text('❌ Unable to generate Mail.tm email. Try 1secMail instead.', reply_markup=buttons)
+           await message.edit_message_text('❌ Unable to generate Mail.tm email. Try Guerrilla Mail instead.', reply_markup=buttons)
     elif response=='refresh':
         session = user_sessions[user_id]
         print(f"Refreshing for user {user_id}, email: {session['email']}, service: {session.get('email_service')}")
@@ -394,21 +394,21 @@ async def mailbox(client,message):
             
             service = session.get('email_service', 'mailtm')
             
-            if service == '1secmail':
-                if not session.get('login') or not session.get('domain'):
+            if service == 'guerrilla':
+                if not session.get('sid_token'):
                     await message.answer('Email session expired. Please generate a new email.', show_alert=True)
                     return
                 
-                messages_data = check_1secmail_messages(session['login'], session['domain'])
+                messages_data = check_guerrilla_messages(session['sid_token'])
                 
                 if not messages_data:
                     await message.answer(f'No messages were received..\nin your Mailbox {session["email"]}')
                     return
                 
                 latest_msg = messages_data[0]
-                user_sessions[user_id]['idnum'] = latest_msg['id']
-                from_msg = latest_msg.get('from', 'Unknown')
-                subject = latest_msg.get('subject', 'No Subject')
+                user_sessions[user_id]['idnum'] = latest_msg['mail_id']
+                from_msg = latest_msg.get('mail_from', 'Unknown')
+                subject = latest_msg.get('mail_subject', 'No Subject')
                 refreshrply = 'You have a message from '+from_msg+'\n\nSubject : '+subject
                 await message.edit_message_text(refreshrply, reply_markup=msg_buttons)
                 
@@ -451,8 +451,8 @@ async def mailbox(client,message):
         try:
             service = session.get('email_service', 'mailtm')
             
-            if service == '1secmail':
-                msg = read_1secmail_message(session['login'], session['domain'], session['idnum'])
+            if service == 'guerrilla':
+                msg = read_guerrilla_message(session['sid_token'], session['idnum'])
                 
                 if not msg:
                     await message.answer('Unable to load message. Please try again.', show_alert=True)
@@ -460,16 +460,16 @@ async def mailbox(client,message):
                 
                 print(msg)
                 
-                from_mail = msg.get('from', 'Unknown')
-                date = msg.get('date', 'Unknown')
-                subjectt = msg.get('subject', 'No Subject')
-                body = msg.get('textBody', msg.get('body', ''))[:500]
+                from_mail = msg.get('mail_from', 'Unknown')
+                date = msg.get('mail_date', 'Unknown')
+                subjectt = msg.get('mail_subject', 'No Subject')
+                body = msg.get('mail_text', msg.get('mail_body', ''))[:500]
                 
                 mailbox_view = f"From: {from_mail}\nDate: {date}\nSubject: {subjectt}\n\nMessage:\n{body}"
                 
-                attachments = msg.get('attachments', [])
+                attachments = msg.get('att', [])
                 if attachments and len(attachments) > 0:
-                    attachment_list = '\n\nAttachments:\n' + '\n'.join([f"- {att.get('filename', 'file')}" for att in attachments])
+                    attachment_list = '\n\nAttachments:\n' + '\n'.join([f"- {att.get('att_name', 'file')}" for att in attachments])
                     mailbox_view += attachment_list
                 
                 await message.edit_message_text(mailbox_view, reply_markup=buttons)
@@ -524,8 +524,8 @@ async def mailbox(client,message):
         
         email_list = "**📋 Your Saved Emails:**\n\n"
         for idx, email_data in enumerate(saved_emails, 1):
-            service_icon = '⚡' if email_data.get('email_service') == '1secmail' else '🔐'
-            service_name = '1secMail' if email_data.get('email_service') == '1secmail' else 'Mail.tm'
+            service_icon = '⚡' if email_data.get('email_service') == 'guerrilla' else '🔐'
+            service_name = 'Guerrilla Mail' if email_data.get('email_service') == 'guerrilla' else 'Mail.tm'
             email_list += f"{idx}. **{email_data['email_name']}** {service_icon}\n   `{email_data['email_address']}`\n   Service: {service_name}\n\n"
         
         email_list += "\n💡 **Commands:**\n"
@@ -541,15 +541,15 @@ async def mailbox(client,message):
 async def generate_cmd(client, message):
     user_id = message.from_user.id
     if user_id not in user_sessions:
-        user_sessions[user_id] = {'email': '', 'auth_token': None, 'idnum': None, 'saved_emails': {}, 'password': '', 'email_service': None, 'login': None, 'domain': None}
+        user_sessions[user_id] = {'email': '', 'auth_token': None, 'idnum': None, 'saved_emails': {}, 'password': '', 'email_service': None, 'sid_token': None}
     
     service_buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton('⚡ 1secMail (Fast)', callback_data='gen_1secmail')],
+        [InlineKeyboardButton('⚡ Guerrilla Mail (Fast)', callback_data='gen_guerrilla')],
         [InlineKeyboardButton('🔐 Mail.tm (Secure)', callback_data='gen_mailtm')],
         [InlineKeyboardButton('❌ Cancel', callback_data='close')]
     ])
     
-    await message.reply('**📧 Choose Email Service:**\n\n⚡ **1secMail** - Fast, no registration, better for bypassing blocks\n🔐 **Mail.tm** - Secure, password-protected emails\n\nSelect your preferred service:', reply_markup=service_buttons)
+    await message.reply('**📧 Choose Email Service:**\n\n⚡ **Guerrilla Mail** - Fast, no registration, better for bypassing blocks\n🔐 **Mail.tm** - Secure, password-protected emails\n\nSelect your preferred service:', reply_markup=service_buttons)
 
 @app.on_message(filters.command('list'))
 async def list_cmd(client, message):
@@ -562,8 +562,8 @@ async def list_cmd(client, message):
     
     email_list = "**📋 Your Saved Emails:**\n\n"
     for idx, email_data in enumerate(saved_emails, 1):
-        service_icon = '⚡' if email_data.get('email_service') == '1secmail' else '🔐'
-        service_name = '1secMail' if email_data.get('email_service') == '1secmail' else 'Mail.tm'
+        service_icon = '⚡' if email_data.get('email_service') == 'guerrilla' else '🔐'
+        service_name = 'Guerrilla Mail' if email_data.get('email_service') == 'guerrilla' else 'Mail.tm'
         email_list += f"{idx}. **{email_data['email_name']}** {service_icon}\n   `{email_data['email_address']}`\n   Service: {service_name}\n\n"
     
     email_list += "\n💡 **Available Commands:**\n"
@@ -596,7 +596,7 @@ async def save_cmd(client, message):
         return
     
     email_service = session.get('email_service', 'mailtm')
-    service_name = '1secMail' if email_service == '1secmail' else 'Mail.tm'
+    service_name = 'Guerrilla Mail' if email_service == 'guerrilla' else 'Mail.tm'
     
     if save_email_to_db(user_id, name, session['email'], session.get('password', ''), email_service):
         await message.reply(f'✅ **Email Saved Successfully!**\n\n📧 Email: `{session["email"]}`\n🔧 Service: **{service_name}**\n💾 Saved as: **{name}**\n\nUse `/load {name}` to reuse this email anytime!')
@@ -607,7 +607,7 @@ async def save_cmd(client, message):
 async def load_cmd(client, message):
     user_id = message.from_user.id
     if user_id not in user_sessions:
-        user_sessions[user_id] = {'email': '', 'auth_token': None, 'idnum': None, 'saved_emails': {}, 'password': '', 'email_service': None, 'login': None, 'domain': None}
+        user_sessions[user_id] = {'email': '', 'auth_token': None, 'idnum': None, 'saved_emails': {}, 'password': '', 'email_service': None, 'sid_token': None}
     
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
@@ -625,22 +625,10 @@ async def load_cmd(client, message):
     
     try:
         email_service = email_data.get('email_service', 'mailtm')
-        service_name = '1secMail' if email_service == '1secmail' else 'Mail.tm'
+        service_name = 'Guerrilla Mail' if email_service == 'guerrilla' else 'Mail.tm'
         
-        if email_service == '1secmail':
-            email_address = email_data['email_address']
-            if '@' in email_address:
-                login, domain = email_address.split('@')
-                user_sessions[user_id]['email'] = email_address
-                user_sessions[user_id]['email_service'] = '1secmail'
-                user_sessions[user_id]['login'] = login
-                user_sessions[user_id]['domain'] = domain
-                user_sessions[user_id]['password'] = ''
-                user_sessions[user_id]['auth_token'] = None
-                user_sessions[user_id]['idnum'] = None
-                await status_msg.edit(f'✅ **Email Loaded Successfully!**\n\n📧 Active email: `{email_address}`\n🔧 Service: **{service_name}**\n💾 Loaded from: **{name}**\n\n💡 Use the "Refresh" button to check for new messages!', reply_markup=buttons)
-            else:
-                await status_msg.edit('❌ Invalid email format for 1secMail.')
+        if email_service == 'guerrilla':
+            await status_msg.edit(f'⚠️ **Guerrilla Mail Cannot Be Reloaded**\n\n📧 Saved email: `{email_data["email_address"]}`\n\n❌ Guerrilla Mail sessions expire and cannot receive new messages after being saved.\n\n💡 Generate a fresh Guerrilla Mail address using `/generate` to receive new messages!')
         else:
             token_data = {'address': email_data['email_address'], 'password': email_data['password']}
             token_resp = re.post("https://api.mail.tm/token", json=token_data, timeout=10)
@@ -650,8 +638,7 @@ async def load_cmd(client, message):
                 user_sessions[user_id]['auth_token'] = token_resp.json()['token']
                 user_sessions[user_id]['password'] = email_data['password']
                 user_sessions[user_id]['email_service'] = 'mailtm'
-                user_sessions[user_id]['login'] = None
-                user_sessions[user_id]['domain'] = None
+                user_sessions[user_id]['sid_token'] = None
                 user_sessions[user_id]['idnum'] = None
                 await status_msg.edit(f'✅ **Email Loaded Successfully!**\n\n📧 Active email: `{email_data["email_address"]}`\n🔧 Service: **{service_name}**\n💾 Loaded from: **{name}**\n\n💡 Use the "Refresh" button to check for new messages!', reply_markup=buttons)
             else:
@@ -683,8 +670,8 @@ async def current_cmd(client, message):
     
     session = user_sessions[user_id]
     service = session.get('email_service', 'mailtm')
-    service_name = '1secMail' if service == '1secmail' else 'Mail.tm'
-    service_icon = '⚡' if service == '1secmail' else '🔐'
+    service_name = 'Guerrilla Mail' if service == 'guerrilla' else 'Mail.tm'
+    service_icon = '⚡' if service == 'guerrilla' else '🔐'
     
     await message.reply(f'**📧 Current Active Email:**\n\n`{session["email"]}`\n🔧 Service: **{service_name}** {service_icon}\n\n💡 Use `/save <name>` to save this email for future use.', reply_markup=buttons)
 
@@ -700,7 +687,7 @@ async def handle_text(client, message):
             return
         
         email_service = session.get('email_service', 'mailtm')
-        service_name = '1secMail' if email_service == '1secmail' else 'Mail.tm'
+        service_name = 'Guerrilla Mail' if email_service == 'guerrilla' else 'Mail.tm'
         
         if save_email_to_db(user_id, name, session['email'], session.get('password', ''), email_service):
             await message.reply(f'✅ **Email Saved Successfully!**\n\n📧 Email: `{session["email"]}`\n🔧 Service: **{service_name}**\n💾 Saved as: **{name}**\n\nUse `/load {name}` to reuse this email anytime!', reply_markup=buttons)
