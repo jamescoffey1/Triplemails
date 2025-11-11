@@ -1,7 +1,7 @@
 # TempMail Telegram Bot
 
 ## Overview
-This is a Telegram bot that generates temporary email addresses using two different services: Mail.tm and Guerrilla Mail. Users can choose between fast generation (Guerrilla Mail) or secure password-protected emails (Mail.tm). The bot supports multiple concurrent users with isolated mailbox sessions. Mail.tm emails can be saved and reused, while Guerrilla Mail provides one-time session emails.
+This is a Telegram bot that generates temporary email addresses using three different services: Guerrilla Mail, DropMail, and Mail.tm. Users can choose between fast one-time emails (Guerrilla Mail), fast reusable emails (DropMail), or secure password-protected emails (Mail.tm). The bot supports multiple concurrent users with isolated mailbox sessions.
 
 ## Project Type
 Telegram Bot (Python/Pyrogram)
@@ -10,8 +10,9 @@ Telegram Bot (Python/Pyrogram)
 - **Language**: Python 3.11
 - **Framework**: Pyrogram (Telegram Bot API)
 - **Email APIs**: 
-  - Mail.tm - Secure password-protected emails (reusable)
   - Guerrilla Mail - Fast no-auth email generation (one-time sessions)
+  - DropMail - Fast GraphQL-based emails (reusable, auto-extends)
+  - Mail.tm - Secure password-protected emails (reusable)
 - **Session Management**: Per-user sessions stored in memory
 - **Database**: PostgreSQL for persistent email storage and user tracking
 - **Dependencies**: 
@@ -28,13 +29,14 @@ The bot requires three environment variables (configured as secrets):
 - `API_HASH` - Telegram API Hash from https://my.telegram.org
 
 ## Features
-- **Dual Email Services** - Choose between two providers:
-  - ⚡ **Guerrilla Mail** - Fast generation, no authentication, great for bypassing blocks
+- **Triple Email Services** - Choose between three providers:
+  - ⚡ **Guerrilla Mail** - Fast one-time sessions (cannot be reloaded)
+  - 📬 **DropMail** - Fast AND reusable (best of both worlds!)
   - 🔐 **Mail.tm** - Secure with password protection, reusable for multiple verifications
 - **Generate** unlimited temporary email addresses
 - **Better Website Support** - Different domains help bypass email blocks
 - **Save emails** with custom names for future reuse
-- **Load saved emails** to receive new verification codes (Mail.tm only)
+- **Load saved emails** to receive new verification codes (Mail.tm and DropMail)
 - **Manage multiple emails** with list, delete, and current commands
 - **Refresh** to check for new messages
 - **View message details** including:
@@ -71,15 +73,24 @@ This bot runs as a worker process (no web frontend). It connects to Telegram's s
 - ❌ **Close** - End current session
 
 ## Recent Changes
-- 2025-11-11: Guerrilla Mail Integration
-  - **Feature**: Added Guerrilla Mail as second email service alongside Mail.tm
+- 2025-11-11: DropMail Session Persistence Fix (CRITICAL)
+  - **Critical Fix**: Added `session_id` column to saved_emails table for DropMail persistence
+  - **Fix**: Updated save_email_to_db() to store DropMail session_id alongside password/token
+  - **Fix**: Updated load_email_from_db() to retrieve session_id from database
+  - **Fix**: Fixed DropMail load logic to use stored session_id instead of reconstructing from email
+  - **Enhancement**: DropMail emails can now be properly saved and reloaded with full session restoration
+  - All three services now have complete save/load functionality working correctly
+
+- 2025-11-11: Triple Service Integration (Guerrilla Mail + DropMail)
+  - **Feature**: Added DropMail as third email service - combines speed AND reusability!
+  - **Feature**: DropMail uses GraphQL API with session auto-extension (stays alive when accessed)
+  - **Feature**: Users can now choose between THREE email services with different benefits
   - **Fix**: Replaced blocked 1secMail API with working Guerrilla Mail API
-  - **Feature**: Users can now choose between two email services with different benefits
   - **Database**: Added `email_service` column to track which service each saved email uses
   - **Enhancement**: Better website compatibility with multiple email domains
   - **Fix**: Updated init_database() to include email_service column for fresh deployments
-  - **Note**: Guerrilla Mail emails are one-time sessions and cannot be reloaded (Mail.tm emails remain fully reusable)
-  - Bot now offers ⚡ Guerrilla Mail (fast, one-time) and 🔐 Mail.tm (secure, reusable) options
+  - **Load Support**: DropMail emails can be saved and reloaded (unlike Guerrilla Mail)
+  - Bot now offers ⚡ Guerrilla Mail (fast, one-time), 📬 DropMail (fast, reusable), and 🔐 Mail.tm (secure, reusable)
 
 - 2025-11-10: Initial Replit setup and API migration
   - **Setup**: Added Python 3.11 environment
