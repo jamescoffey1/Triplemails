@@ -1,29 +1,50 @@
 # copyright 2020-22 @Mohamed Rizad
 # Telegram @riz4d
 # Instagram @riz.4d
+
 from pyrogram import *
 import requests as re
 from Config import *
-from pyrogram.types import InlineKeyboardButton,InlineKeyboardMarkup
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import wget
 import os
 import psycopg2
-from psycopg2.extras import RealDictCursor 
+from psycopg2.extras import RealDictCursor
 
-buttons=InlineKeyboardMarkup(
-                             [
-                             [
+# --- START: Flask server for Render port detection ---
+from flask import Flask
+import threading
+
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))  # Render sets this automatically
+    flask_app.run(host="0.0.0.0", port=port)
+
+# Run Flask server in a separate thread
+threading.Thread(target=run_flask).start()
+# --- END: Flask server ---
+ 
+# Existing bot buttons
+buttons = InlineKeyboardMarkup(
+    [
+        [
             InlineKeyboardButton('📧 Generate New', callback_data='generate'),
             InlineKeyboardButton('🔄 Refresh', callback_data='refresh')
-                   ],
-                   [
+        ],
+        [
             InlineKeyboardButton('💾 Save Email', callback_data='save_email'),
             InlineKeyboardButton('📋 My Emails', callback_data='list_emails')
-                   ],
-                   [
+        ],
+        [
             InlineKeyboardButton('❌ Close', callback_data='close')
-                   ] 
-                             ])
+        ]
+    ]
+)
 
 msg_buttons=InlineKeyboardMarkup(
                              [
@@ -35,7 +56,6 @@ msg_buttons=InlineKeyboardMarkup(
             InlineKeyboardButton('❌ Close', callback_data='close')
                    ] 
                              ])
-
 
 app=Client('Temp-Mail Bot',
            api_id=API_ID,
